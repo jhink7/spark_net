@@ -3,6 +3,7 @@ from pyspark.mllib.classification import LogisticRegressionWithLBFGS
 from pyspark.mllib.regression import LabeledPoint
 import numpy as np
 
+
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -20,21 +21,40 @@ def parse_entry(line):
 
 class NetworkFilter:
 
+    def __load_data(self, data_path):
+        logger.info("Loading training data...")
+        raw_data = self.sc.textFile(data_path)
+        data = raw_data.map(parse_entry)
+        return data
+
     def __train_model(self):
         logger.info("Training the Logit model...")
-        self.model = LogisticRegressionWithLBFGS.train(self.train_data)
+        model = LogisticRegressionWithLBFGS.train(self.train_data)
         logger.info("Logit model built!")
+        return model
 
     def block(self, features):
         return self.model.predict(features) == 1
+
+    def reload_and_retrain(self, data_path):
+        try:
+            # Load intial training data
+            data = self.__load_data(data_path)
+            # Train the intial model
+            model = self.__train_model()
+
+            self.train_data = data
+            self.model = model
+        except Exception:
+            logger.error("Error reloading data")
+            raise Exception("Error reloading data")
+
 
     def __init__(self, sc):
         # Init filter with injected spark context
         logger.info("Starting up the Network Filter: ")
         self.sc = sc
-        # Load training data
-        logger.info("Loading training data...")
-        raw_data = self.sc.textFile('data/corrected.gz')
-        self.train_data = raw_data.map(parse_entry)
-        # Train the model
-        self.__train_model()
+        # Load intial training data
+        self.train_data = self.__load_data('data/corrected.gz')
+        # Train the intial model
+        self.model = self.__train_model()
